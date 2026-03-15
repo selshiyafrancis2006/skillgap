@@ -11,4 +11,7 @@ build/
 
 # Logs
 logs/
-*.log
+*.logBackend/debug_test.js
+Backend/fix_resumes.js
+Frontend/node_modules/
+Backend/uploads/
