@@ -1,4 +1,3 @@
-// resumeOptimizer.controller.js
 const Resume = require('../models/resume');
 
 exports.optimizeResume = async (req, res) => {
@@ -8,20 +7,31 @@ exports.optimizeResume = async (req, res) => {
     const resume = await Resume.findById(resumeId).lean();
     if (!resume) return res.status(404).json({ error: "Resume not found" });
 
-    const userSkills = resume.skills || [];
+    const userSkills = (resume.skills || []).map(s => s.toLowerCase());
+    const targetSkills = (targetRoleSkills || []);
+    const targetSkillsLower = targetSkills.map(s => s.toLowerCase());
 
-    const missingSkills = targetRoleSkills.filter(skill => !userSkills.includes(skill));
+    // Only count skills that exist in target role stack
+    const matchedSkills = targetSkills.filter(s => userSkills.includes(s.toLowerCase()));
+    const missingSkills = targetSkills.filter(s => !userSkills.includes(s.toLowerCase()));
 
-    const suggestedChanges = missingSkills.map(skill => `Add '${skill}' in skills or projects section`);
+    const suggestedChanges = missingSkills.map(skill =>
+      `Add '${skill}' in your skills or projects section`
+    );
 
-    // Dummy scoring: current vs optimized
-    const currentScore = Math.round((userSkills.length / targetRoleSkills.length) * 100);
+    // Always 0-100% — matched out of target skills only
+    const currentScore = targetSkills.length
+      ? Math.min(Math.round((matchedSkills.length / targetSkills.length) * 100), 100)
+      : 0;
+
+    // Optimized score — if you add all missing skills
     const optimizedScore = Math.min(currentScore + missingSkills.length * 5, 100);
 
     res.json({
       resumeId,
       currentScore,
       optimizedScore,
+      matchedSkills,
       missingSkills,
       suggestedChanges
     });
