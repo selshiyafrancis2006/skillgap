@@ -96,6 +96,32 @@ function RoadmapTimeline({ roadmap }) {
   );
 }
 
+// Safely extract a numeric score from any format the backend might return
+function parseScore(raw) {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === "number") return Math.round(raw);
+  if (typeof raw === "string") return Math.round(parseFloat(raw)) || 0;
+  if (typeof raw === "object") {
+    // Try common field names
+    const val = raw.score ?? raw.total ?? raw.value ?? raw.percentage ?? raw.result ?? 0;
+    return Math.round(typeof val === "number" ? val : parseFloat(val) || 0);
+  }
+  return 0;
+}
+
+// Role-based target skill sets — more comprehensive than user's current skills
+const roleTargetSkills = {
+  "Full Stack Developer":   "React, Node.js, MongoDB, Express, AWS, TypeScript, Docker, PostgreSQL, Redis, System Design",
+  "Frontend Developer":     "React, TypeScript, Next.js, Redux, Tailwind, GraphQL, Testing, Webpack, Accessibility, Performance",
+  "Backend Developer":      "Node.js, Express, PostgreSQL, MongoDB, Redis, Docker, AWS, Microservices, System Design, Security",
+  "Data Scientist":         "Python, Pandas, NumPy, scikit-learn, TensorFlow, SQL, Matplotlib, Spark, Statistics, ML Pipelines",
+  "AI Engineer":            "Python, TensorFlow, PyTorch, NLP, Docker, AWS, FastAPI, MLflow, Transformers, RAG",
+  "DevOps Engineer":        "Docker, Kubernetes, AWS, Jenkins, Terraform, Linux, CI/CD, Ansible, Monitoring, Security",
+  "Mobile Developer":       "React Native, Flutter, Swift, Kotlin, Firebase, Redux, Testing, CI/CD, App Store, Performance",
+  "Cloud Engineer":         "AWS, Azure, GCP, Terraform, Kubernetes, Docker, Linux, Networking, Security, Cost Optimization",
+  "Cybersecurity Engineer": "Linux, Networking, Python, Wireshark, Metasploit, Firewalls, SIEM, Cryptography, Pentesting, OWASP",
+};
+
 export default function ResumeIntelligence({ onResumeLoaded }) {
   const [uploading, setUploading] = useState(false);
   const [data, setData] = useState(null);
@@ -107,7 +133,14 @@ export default function ResumeIntelligence({ onResumeLoaded }) {
     setUploading(true);
     try {
       const d = await api.uploadResume(file);
-      if (d.resume) { setData(d); onResumeLoaded(d.resume._id); }
+      if (d.resume) {
+        setData(d);
+        onResumeLoaded(d.resume._id);
+        // Auto-set target skills based on detected role
+        const role = d.targetRole || d.resume?.targetRole || "Full Stack Developer";
+        const suggested = roleTargetSkills[role] || roleTargetSkills["Full Stack Developer"];
+        setTargetSkills(suggested);
+      }
       else alert(d.error || "Upload failed");
     } catch { alert("Cannot connect to backend on port 5000."); }
     setUploading(false);
@@ -132,7 +165,7 @@ export default function ResumeIntelligence({ onResumeLoaded }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
           {/* Stats Row */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-            <StatCard label="Resume Score" value={`${typeof data.resumeScore === 'object' ? (data.resumeScore?.score ?? data.resumeScore?.total ?? 0) : (data.resumeScore ?? 0)}%`} icon="◎" delay={0} />
+            <StatCard label="Resume Score" value={`${parseScore(data.resumeScore)}%`} icon="◎" delay={0} />
             <StatCard label="Experience" value={data.experienceLevel ?? "MID"} color="var(--cyan)" icon="◈" delay={0.05} />
             <StatCard label="Skills Found" value={data.skillsDetected?.length ?? 0} color="var(--green)" icon="▲" delay={0.1} />
             <StatCard label="Gaps Found" value={data.missingCoreSkills?.length ?? 0} color="var(--red)" icon="◆" delay={0.15} />
@@ -176,17 +209,24 @@ export default function ResumeIntelligence({ onResumeLoaded }) {
               </Btn>
             </div>
             {optResult && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
-                <div style={{ background: "var(--bg3)", border: "1px solid var(--red)22", borderRadius: 4, padding: 16, textAlign: "center" }}>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, color: "var(--red)" }}>{optResult.currentScore}%</div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 2, marginTop: 4 }}>CURRENT SCORE</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div style={{ background: "var(--bg3)", border: "1px solid var(--red)22", borderRadius: 4, padding: 16, textAlign: "center" }}>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, color: "var(--red)" }}>
+                      {Math.min(optResult.currentScore, 100)}%
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 2, marginTop: 4 }}>CURRENT SCORE</div>
+                  </div>
+                  <div style={{ background: "var(--bg3)", border: "1px solid var(--green)22", borderRadius: 4, padding: 16, textAlign: "center" }}>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, color: "var(--green)" }}>
+                      {Math.min(optResult.optimizedScore, 100)}%
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 2, marginTop: 4 }}>OPTIMIZED SCORE</div>
+                  </div>
                 </div>
-                <div style={{ background: "var(--bg3)", border: "1px solid var(--green)22", borderRadius: 4, padding: 16, textAlign: "center" }}>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, color: "var(--green)" }}>{optResult.optimizedScore}%</div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 2, marginTop: 4 }}>OPTIMIZED SCORE</div>
-                </div>
+
                 {optResult.suggestedChanges?.length > 0 && (
-                  <div style={{ gridColumn: "1/-1" }}>
+                  <div>
                     <div style={{ fontSize: 10, color: "var(--muted2)", letterSpacing: 2, marginBottom: 10 }}>SUGGESTED CHANGES</div>
                     {optResult.suggestedChanges.map((c, i) => (
                       <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 12, color: "var(--muted2)" }}>
@@ -195,12 +235,56 @@ export default function ResumeIntelligence({ onResumeLoaded }) {
                     ))}
                   </div>
                 )}
+
+                {/* Smart roadmap based on missing skills */}
+                {optResult.missingSkills?.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: 4, marginBottom: 14 }}>
+                      YOUR LEARNING ROADMAP TO CLOSE GAPS
+                    </div>
+                    {optResult.missingSkills.map((skill, i) => {
+                      const plans = {
+                        "React":       { weeks: 2, project: "Build a dynamic todo app with React hooks" },
+                        "Node.js":     { weeks: 2, project: "Build a REST API with Express and MongoDB" },
+                        "AWS":         { weeks: 3, project: "Deploy a Node.js app on AWS EC2 + S3" },
+                        "MongoDB":     { weeks: 1, project: "Build a CRUD app with Mongoose" },
+                        "TypeScript":  { weeks: 2, project: "Rewrite an existing JS project in TypeScript" },
+                        "Docker":      { weeks: 2, project: "Containerize your full-stack app" },
+                        "PostgreSQL":  { weeks: 2, project: "Build a relational DB schema for a blog" },
+                        "Redis":       { weeks: 1, project: "Implement session caching with Redis" },
+                        "GraphQL":     { weeks: 2, project: "Build a GraphQL API with Apollo Server" },
+                        "Python":      { weeks: 3, project: "Build a data analysis script with Pandas" },
+                        "Kubernetes":  { weeks: 3, project: "Deploy a microservice on a local K8s cluster" },
+                        "Terraform":   { weeks: 2, project: "Provision AWS infrastructure with Terraform" },
+                        "JavaScript":  { weeks: 2, project: "Build 3 JS mini projects (calculator, quiz, weather app)" },
+                        "System Design": { weeks: 3, project: "Design a URL shortener and a chat system" },
+                      };
+                      const plan = plans[skill] || { weeks: 2, project: `Build a mini project using ${skill}` };
+                      return (
+                        <div key={skill} style={{
+                          background: "var(--bg3)", border: "1px solid var(--border)",
+                          borderLeft: `3px solid var(--amber)`, borderRadius: "0 4px 4px 0",
+                          padding: "14px 16px", marginBottom: 8,
+                          animation: `fadeUp 0.3s ease ${i * 0.07}s both`
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{skill}</span>
+                            <span style={{ fontSize: 10, color: "var(--amber)", letterSpacing: 2 }}>~{plan.weeks} WEEKS</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--muted2)", fontStyle: "italic" }}>
+                            {plan.project}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </Card>
 
-          {/* Roadmap */}
-          {data.roadmap?.length > 0 && (
+          {/* Roadmap — only show if optimizer hasn't run yet */}
+          {data.roadmap?.length > 0 && !optResult && (
             <Card>
               <RoadmapTimeline roadmap={data.roadmap} />
             </Card>

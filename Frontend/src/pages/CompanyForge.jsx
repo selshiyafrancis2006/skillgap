@@ -53,9 +53,6 @@ export default function CompanyForge({ resumeId }) {
   const [userSkills, setUserSkills] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [chatQ, setChatQ] = useState("");
-  const [chatHistory, setChatHistory] = useState([]);
-  const [chatLoading, setChatLoading] = useState(false);
 
   const forge = async () => {
     if (!selected) return;
@@ -69,37 +66,25 @@ export default function CompanyForge({ resumeId }) {
       try { optResult = await api.optimizeResume(resumeId, company.stack); } catch { }
     }
 
-    // Use skills from optimizer response OR from manual input
-    const resumeSkills = optResult ? [] : skills; // optimizer handles matching server-side
     const matched = optResult
       ? company.stack.filter(s => !(optResult.missingSkills || []).includes(s))
       : company.stack.filter(s => skills.map(x => x.toLowerCase()).includes(s.toLowerCase()));
+
     const missing = optResult?.missingSkills
       ?? company.stack.filter(s => !skills.map(x => x.toLowerCase()).includes(s.toLowerCase()));
 
-    const matchScore = optResult?.currentScore ?? Math.round((matched.length / company.stack.length) * 100);
-    const targetScore = optResult?.optimizedScore ?? Math.min(matchScore + missing.length * 5, 100);
+    // Always calculate from matched/total — never trust raw optResult score
+    const matchScore = Math.min(
+      Math.round((matched.length / company.stack.length) * 100),
+      100
+    );
+    const targetScore = Math.min(matchScore + 40, 100);
 
     setResult({ matched, missing, matchScore, targetScore, company });
     setLoading(false);
   };
 
-  const askForge = async () => {
-    if (!chatQ.trim() || !selected) return;
-    const q = chatQ.trim();
-    setChatHistory(h => [...h, { role: "user", text: q }]);
-    setChatQ("");
-    setChatLoading(true);
-    try {
-      const d = await api.getCareerAdvice(`${selected} company: ${q}`);
-      let reply = d.answer || `Here's what you need to know about ${selected}: focus on their core stack and culture values.`;
-      if (d.resources?.length) reply += "\n\nResources:\n" + d.resources.map(r => `• ${r}`).join("\n");
-      setChatHistory(h => [...h, { role: "ai", text: reply }]);
-    } catch {
-      setChatHistory(h => [...h, { role: "ai", text: "Couldn't connect to advisor. Check your backend." }]);
-    }
-    setChatLoading(false);
-  };
+
 
   return (
     <div style={{ animation: "fadeIn 0.3s ease" }}>
@@ -176,8 +161,8 @@ export default function CompanyForge({ resumeId }) {
           {result && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
-                <StatCard label="Current Fit" value={`${result.matchScore}%`} color="var(--red)" delay={0} />
-                <StatCard label="Target Fit" value={`${result.targetScore}%`} color="var(--green)" delay={0.05} />
+                <StatCard label="Current Fit" value={`${Math.min(result.matchScore, 100)}%`} color="var(--red)" delay={0} />
+                <StatCard label="Target Fit" value={`${Math.min(result.targetScore, 100)}%`} color="var(--green)" delay={0.05} />
                 <StatCard label="Skills to Add" value={result.missing.length} color={COMPANIES[selected].color} delay={0.1} />
               </div>
 
@@ -223,34 +208,7 @@ export default function CompanyForge({ resumeId }) {
             </div>
           )}
 
-          {/* Company-specific AI Advisor */}
-          <Card>
-            <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: 4, marginBottom: 16 }}>
-              ASK THE {selected.toUpperCase()} ADVISOR
-            </div>
-            <div style={{ maxHeight: 240, overflowY: "auto", marginBottom: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-              {chatHistory.length === 0 && (
-                <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>
-                  Ask anything about working at {selected}, their interview process, culture, or how to prepare…
-                </div>
-              )}
-              {chatHistory.map((m, i) => (
-                <div key={i} style={{
-                  padding: "10px 14px", borderRadius: 4, fontSize: 12, lineHeight: 1.7,
-                  background: m.role === "user" ? `${COMPANIES[selected].color}18` : "var(--bg3)",
-                  border: `1px solid ${m.role === "user" ? `${COMPANIES[selected].color}44` : "var(--border)"}`,
-                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                  maxWidth: "85%", whiteSpace: "pre-wrap", color: "var(--muted2)"
-                }}>{m.text}</div>
-              ))}
-              {chatLoading && <div style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>thinking…</div>}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <Input value={chatQ} onChange={e => setChatQ(e.target.value)}
-                placeholder={`e.g. How do I prepare for ${selected} interviews?`} />
-              <Btn onClick={askForge} disabled={chatLoading} small>ASK</Btn>
-            </div>
-          </Card>
+
         </div>
       )}
     </div>
